@@ -1,12 +1,18 @@
 import Stack from './stack';
 import Konva from "konva";
-import { createMachine, interpret } from "xstate";
+import {createMachine, interpret} from "xstate";
+import UndoManager from './undoManager.js'
+import UndoCommand from './UndoCommand.js'
 
 const stage = new Konva.Stage({
     container: "container",
     width: 400,
     height: 400,
 });
+let redoButton = document.getElementById("redo");
+let undoButton = document.getElementById("undo");
+
+let undoManager = new UndoManager(undoButton, redoButton);
 
 // Une couche pour le dessin
 const dessin = new Konva.Layer();
@@ -30,6 +36,15 @@ const polylineMachine = createMachine(
                         target: "onePoint",
                         actions: "createLine",
                     },
+                    undo: {
+                        target: "idle",
+                        actions: "undoLine"
+                    },
+                    redo: {
+                        target: "idle",
+                        actions: "redoLine"
+                    },
+
                 },
             },
             onePoint: {
@@ -41,6 +56,15 @@ const polylineMachine = createMachine(
                     MOUSEMOVE: {
                         actions: "setLastPoint",
                     },
+                    undo: {
+                        target: "idle",
+                        actions: "undoLine"
+                    },
+                    redo: {
+                        target: "idle",
+                        actions: "redoLine"
+                    },
+
                     Escape: { // event.key
                         target: "idle",
                         actions: "abandon",
@@ -68,10 +92,18 @@ const polylineMachine = createMachine(
                         target: "idle",
                         actions: "abandon",
                     },
+                    undo: {
+                        target: "idle",
+                        actions: "undoline"
+                    },
+                    redo: {
+                        target: "idle",
+                        actions: "redoLine"
+                    },
 
                     Enter: { // event.key
                         target: "idle",
-                        actions: "saveLine",
+                        actions: ["pushLine", "saveLine"]
                     },
 
                     Backspace: [ // event.key
@@ -120,6 +152,7 @@ const polylineMachine = createMachine(
                 polyline.stroke("black"); // On change la couleur
                 // On sauvegarde la polyline dans la couche de dessin
                 dessin.add(polyline); // On l'ajoute à la couche de dessin
+                undoManager.execute(new UndoCommand(polyline, dessin))
             },
             addPoint: (context, event) => {
                 const pos = stage.getPointerPosition();
@@ -153,6 +186,7 @@ const polylineMachine = createMachine(
     }
 );
 
+
 const polylineService = interpret(polylineMachine)
     .onTransition((state) => {
         console.log("Current state:", state.value);
@@ -170,4 +204,11 @@ stage.on("mousemove", () => {
 window.addEventListener("keydown", (event) => {
     console.log("Key pressed:", event.key);
     polylineService.send(event.key);
+});
+
+undoButton.addEventListener("click", () => {
+   undoManager.undo();
+});
+redoButton.addEventListener("click", () => {
+    undoManager.redo();
 });
